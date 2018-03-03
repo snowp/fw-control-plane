@@ -47,7 +47,7 @@ public class FileConfigurationManager {
       "endpoints", ResourceType.ENDPOINT
   );
 
-  @FunctionalInterface interface ResourceUpdateCallback {
+  @FunctionalInterface public interface ResourceUpdateCallback {
     void onResourceUpdate(String group, Multimap<ResourceType, Message> resources);
   }
 
@@ -92,12 +92,17 @@ public class FileConfigurationManager {
 
           // todo: deterministly generate version from resources
           groupSnapshots.put(groupName, Snapshot.create(resourcesMap, "version"));
+
+          ImmutableMultimap<ResourceType, Message> resourcesCopy =
+              ImmutableMultimap.copyOf(resourcesMap);
+
+          callbackExecutor.submit(() -> resourceUpdateCallback.onResourceUpdate(groupName, resourcesCopy));
         }
       }
     }
   }
 
-  void processFileEvents() throws InterruptedException, IOException {
+  public void processFileEvents() throws InterruptedException, IOException {
     WatchKey key = watchService.poll(1, TimeUnit.SECONDS);
 
     if (key == null) {
@@ -120,9 +125,7 @@ public class FileConfigurationManager {
       Path eventPath = pathWatchEvent.context();
 
       Path absolutePath = ((Path) key.watchable()).resolve(eventPath.toString());
-      System.out.println(absolutePath);
       Path relativePath = configDirectory.relativize(absolutePath);
-      System.out.println(relativePath);
       if (relativePath.getNameCount() == 1) {
         // this is a group
         String groupName = eventPath.getFileName().toString();
@@ -187,6 +190,10 @@ public class FileConfigurationManager {
 
     synchronized (monitor) {
       Snapshot oldSnapshot = groupSnapshots.remove(group);
+      if (oldSnapshot == null) {
+        // needs to be mutable becase we try to clean it out on the next few lines
+        oldSnapshot = Snapshot.create(HashMultimap.create(), "first!");
+      }
       Multimap<ResourceType, Message> oldResourcesMap = oldSnapshot.resources();
       oldResourcesMap.removeAll(resourceNames.get(resourceType));
       oldResourcesMap.putAll(resourceNames.get(resourceType), resources);
