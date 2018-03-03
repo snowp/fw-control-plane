@@ -3,8 +3,8 @@ package source.com.snowp.fw_control_plane;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.MultimapBuilder;
 import com.google.protobuf.Message;
 import io.envoyproxy.controlplane.cache.ResourceType;
 import io.envoyproxy.controlplane.cache.Snapshot;
@@ -16,7 +16,6 @@ import java.nio.file.Path;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -30,7 +29,7 @@ import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
 import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
 
 public class FileConfigurationManager {
-  private final WatchService watcher = FileSystems.getDefault().newWatchService();
+  private final WatchService watchService = FileSystems.getDefault().newWatchService();
   private final Path configDirectory;
   private final ResourceUpdateCallback resourceUpdateCallback;
   private final ResourceFileReader resourceFileReader;
@@ -67,23 +66,23 @@ public class FileConfigurationManager {
   // reads the current state of the file tree constructing an initial snapshot and setting
   // the appropriate watches
   private void initializeSnapshot() throws IOException {
-    watches.put("MAIN", configDirectory.register(watcher, ENTRY_DELETE, ENTRY_CREATE));
+    watches.put("MAIN", configDirectory.register(watchService, ENTRY_CREATE, ENTRY_DELETE));
 
     try (DirectoryStream<Path> configDirectoryStream = Files.newDirectoryStream(configDirectory)) {
       for (Path group : configDirectoryStream) {
         System.out.println("group=" + group.getFileName().toString());
         // watch each group and keep track of the watches so we can cancel them
         String groupName = group.getFileName().toString();
-        watches.put(groupName,
-            group.register(watcher, ENTRY_CREATE, ENTRY_DELETE));
+        watches.put(groupName, group.register(watchService, ENTRY_CREATE, ENTRY_DELETE));
 
         HashMultimap<ResourceType, Message> resourcesMap = HashMultimap.create();
 
         try (DirectoryStream<Path> groupDirectoryStream = Files.newDirectoryStream(group)) {
           for (Path resource : groupDirectoryStream) {
             String resourceName = resource.getFileName().toString();
+
             watches.put(groupName + "/" + resourceName,
-                resource.register(watcher, ENTRY_CREATE, ENTRY_DELETE));
+                resource.register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY));
 
             ResourceType resourceType = resourceNames.get(resourceName);
             Iterable<Message> currentResources = currentResources(resource, resourceType);
@@ -99,13 +98,11 @@ public class FileConfigurationManager {
   }
 
   void processFileEvents() throws InterruptedException, IOException {
-    WatchKey key = watcher.poll(1, TimeUnit.SECONDS);
+    WatchKey key = watchService.poll(1, TimeUnit.SECONDS);
 
     if (key == null) {
       return;
     }
-
-    System.out.println("non-null");
 
     for (WatchEvent<?> event : key.pollEvents()) {
       if (event.kind().equals(OVERFLOW)) {
@@ -122,25 +119,47 @@ public class FileConfigurationManager {
       WatchEvent<Path> pathWatchEvent = (WatchEvent<Path>) event;
       Path eventPath = pathWatchEvent.context();
 
-      if (eventPath.getParent().equals(configDirectory)) {
+      Path absolutePath = ((Path) key.watchable()).resolve(eventPath.toString());
+      System.out.println(absolutePath);
+      Path relativePath = configDirectory.relativize(absolutePath);
+      System.out.println(relativePath);
+      if (relativePath.getNameCount() == 1) {
         // this is a group
+        String groupName = eventPath.getFileName().toString();
         if (event.kind().equals(ENTRY_CREATE)) {
-          // we got a new group, so parse the whole directory and assign watches
+          // we got a new group, so parse the whole group directory and assign watches
 
-          newGroupWatch(eventPath);
+          try (DirectoryStream<Path> resources = Files.newDirectoryStream(absolutePath)) {
+            for (Path resource : resources) {
+              updateResource(groupName, resource.getFileName().toString());
+            }
+          }
+
+          newGroupWatch(absolutePath, relativePath);
         } else if (event.kind().equals(ENTRY_DELETE)) {
           // this is gone, so cancel the watch
-          WatchKey groupWatch = watches.remove(eventPath.getFileName().toString());
-          groupWatch.cancel();
+          watches.remove(groupName).cancel();
+          groupSnapshots.remove(groupName);
+          // todo(snowp): group delete callback
         } else {
           // UNREACHED: we don't register modify events for groups
         }
-      } else {
-        // this has to be at the group level
-        String group = eventPath.getParent().getFileName().toString();
+      } else if (relativePath.getNameCount() == 2) {
+        // this is the addition or deletion of a resource
+        // all we need to do is update the watch
 
-        // todo: proper error handling
-        String resourceType = eventPath.getFileName().toString().split("\\.")[0];
+        if (event.kind().equals(ENTRY_CREATE)) {
+          watches.put(relativePath.toString(),
+              absolutePath.register(watchService, ENTRY_CREATE, ENTRY_DELETE));
+        } else {
+          watches.remove(relativePath.toString()).cancel();
+        }
+      } else {
+        // this means a resource file was modified, so let's read the entire resource directory
+        String resourceType = relativePath.getName(1).toString();
+
+        // this has to be at the group level
+        String group = relativePath.getName(0).toString();
 
         if (event.kind().equals(ENTRY_DELETE)) {
           clearResource(group, resourceType);
@@ -187,17 +206,17 @@ public class FileConfigurationManager {
     try (DirectoryStream<Path> pathDirectoryStream = Files.newDirectoryStream(resourcePath,
         "*.json")) {
       for (Path path : pathDirectoryStream) {
-        resources.add(resourceFileReader.readResource(path, resourceType));
+        resourceFileReader.readResource(path, resourceType).ifPresent(resources::add);
       }
     }
 
     return resources;
   }
 
-  private void newGroupWatch(Path eventPath) {
+  private void newGroupWatch(Path absolutePath, Path relativePath) {
     try {
-      watches.put(eventPath.getFileName().toString(),
-          eventPath.register(watcher, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY));
+      watches.put(relativePath.toString(),
+          absolutePath.register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY));
     } catch (IOException e) {
       throw new RuntimeException(e);
     }

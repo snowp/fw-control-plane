@@ -32,7 +32,7 @@ public class Main {
             Executors.newSingleThreadExecutor());
 
     WatchService watcher = FileSystems.getDefault().newWatchService();
-    // watch the top level directory for changes in the set of groups 
+    // watch the top level directory for changes in the set of groups
     configDirectory.register(watcher, ENTRY_CREATE, ENTRY_DELETE);
 
     SimpleCache cache = new SimpleCache(null, g -> "foo");

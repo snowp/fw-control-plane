@@ -6,12 +6,11 @@ java_library(
         "com/snowp/fw_control_plane/ResourceFileReader.java"
     ],
     deps = [
-        "@io_envoyproxy_controlplane_cache//jar",
-        "@io_envoyproxy_controlplane_api//jar",
-        "@com_google_protobuf_protobuf_java_util//jar",
-        "@com_google_protobuf//:protobuf_java",
-        "@com_google_guava_guava//jar",
-        "@org_slf4j_slf4j_api//jar",
+        "//3rdparty/jvm/io/envoyproxy/controlplane:api",
+        "//3rdparty/jvm/io/envoyproxy/controlplane:cache",
+        "//3rdparty/jvm/com/google/protobuf:protobuf_java",
+        "//3rdparty/jvm/com/google/protobuf:protobuf_java_util",
+        "//3rdparty/jvm/com/google/guava:guava",
     ],
     visibility = ['//visibility:public']
 )

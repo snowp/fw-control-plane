@@ -13,9 +13,13 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
 
 public class ResourceFileReader {
+
+  private static final Logger logger = Logger.getLogger(ResourceFileReader.class.getName());
 
   private static final Map<ResourceType, Supplier<Message.Builder>> resourceConstructors =
       ImmutableMap.of(
@@ -25,18 +29,22 @@ public class ResourceFileReader {
           ResourceType.ROUTE, Rds.RouteConfiguration::newBuilder
       );
 
-  Message readResource(Path path, ResourceType resourceType) {
+  Optional<Message> readResource(Path path, ResourceType resourceType) {
     FileInputStream fileInputStream;
     Message.Builder resourceBuilder = resourceConstructors.get(resourceType).get();
 
     try {
       fileInputStream = new FileInputStream(path.toFile());
-      JsonFormat.parser().merge(new InputStreamReader(fileInputStream),
-          resourceBuilder);
+      JsonFormat.parser()
+          .ignoringUnknownFields()
+          .merge(new InputStreamReader(fileInputStream), resourceBuilder);
     } catch (IOException e) {
-      throw new RuntimeException(e);
+      logger.warning("failed to parse json at path=" + path.toString());
+      e.printStackTrace();
+
+      return Optional.empty();
     }
 
-    return resourceBuilder.build();
+    return Optional.of(resourceBuilder.build());
   }
 }

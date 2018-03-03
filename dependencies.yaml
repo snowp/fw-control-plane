@@ -1,0 +1,35 @@
+options:
+  languages:
+  - java
+  resolvers: 
+  - id: "mavencentral"
+    type: "default"
+    url: https://repo.maven.apache.org/maven2/
+  transitivity: runtime_deps
+  versionConflictPolicy: highest
+
+dependencies:
+  io.envoyproxy.controlplane:
+    cache:
+      lang: java
+      version: "0.0.7"
+    api:
+      lang: java
+      version: "0.0.7"
+    server: 
+      lang: java
+      version: "0.0.7"
+  com.google.protobuf:
+    protobuf-java-util:
+      lang: java
+      version: "3.5.1"
+  com.google.guava:
+    guava:
+      lang: java
+      version: "24.0-jre"
+  junit:
+    junit:
+      lang: java
+      version: "4.12"
+
+
