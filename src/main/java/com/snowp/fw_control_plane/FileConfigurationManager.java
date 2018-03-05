@@ -3,7 +3,6 @@ package source.com.snowp.fw_control_plane;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Multimap;
 import com.google.protobuf.Message;
 import io.envoyproxy.controlplane.cache.ResourceType;
@@ -96,7 +95,8 @@ public class FileConfigurationManager {
           ImmutableMultimap<ResourceType, Message> resourcesCopy =
               ImmutableMultimap.copyOf(resourcesMap);
 
-          callbackExecutor.submit(() -> resourceUpdateCallback.onResourceUpdate(groupName, resourcesCopy));
+          callbackExecutor.submit(
+              () -> resourceUpdateCallback.onResourceUpdate(groupName, resourcesCopy));
         }
       }
     }
@@ -113,9 +113,7 @@ public class FileConfigurationManager {
       if (event.kind().equals(OVERFLOW)) {
         // in this case we should reset our watches and reload everything
         // because it means we've missed something due to the event buffer being full
-        synchronized (monitor) {
-          watches.clear();
-        }
+        watches.clear();
         initializeSnapshot();
         return;
       }
@@ -171,6 +169,7 @@ public class FileConfigurationManager {
         }
       }
     }
+    key.reset();
   }
 
   private void clearResource(String group, String resourceType) {

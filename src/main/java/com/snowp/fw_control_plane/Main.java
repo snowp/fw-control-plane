@@ -1,41 +1,31 @@
 package source.com.snowp.fw_control_plane;
 
+import io.envoyproxy.controlplane.cache.SimpleCache;
+import io.envoyproxy.controlplane.cache.Snapshot;
+import io.envoyproxy.controlplane.server.DiscoveryServer;
+import io.grpc.Server;
+import io.grpc.netty.NettyServerBuilder;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchEvent;
-import java.nio.file.WatchService;
-import java.util.Collections;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import io.envoyproxy.controlplane.cache.Snapshot;
-import io.envoyproxy.controlplane.cache.SimpleCache;
-
-import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
-import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
-import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
-import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class Main {
   public static void main(String[] args) throws Exception {
+    SimpleCache cache = new SimpleCache(null, g -> "foo");
 
     Path configDirectory = Paths.get(System.getProperty("user.dir"), args[0].split("/"));
 
+    // cheap and dirty way of ensuring we bump the version
+    AtomicLong counter = new AtomicLong();
+
     FileConfigurationManager fileConfigurationManager =
         new FileConfigurationManager(configDirectory,
-            ((group, resources) -> System.out.println("group=" + group)), new ResourceFileReader(),
+            ((group, resources) -> cache.setSnapshot(group,
+                Snapshot.create(resources, ((Long) counter.incrementAndGet()).toString()))),
+            new ResourceFileReader(),
             Executors.newSingleThreadExecutor());
-
-    WatchService watcher = FileSystems.getDefault().newWatchService();
-    // watch the top level directory for changes in the set of groups
-    configDirectory.register(watcher, ENTRY_CREATE, ENTRY_DELETE);
-
-    SimpleCache cache = new SimpleCache(null, g -> "foo");
 
     Thread fwThread = new Thread(() -> {
       while (true) {
@@ -51,7 +41,19 @@ public class Main {
       }
     });
 
+    DiscoveryServer discoveryServer = new DiscoveryServer(cache);
+
+    Server grpcServer = NettyServerBuilder.forPort(5555)
+        .addService(discoveryServer.getEndpointDiscoveryServiceImpl())
+        .addService(discoveryServer.getRouteDiscoveryServiceImpl())
+        .addService(discoveryServer.getListenerDiscoveryServiceImpl())
+        .addService(discoveryServer.getClusterDiscoveryServiceImpl())
+        .addService(discoveryServer.getEndpointDiscoveryServiceImpl())
+        .build();
+
     fwThread.start();
+    grpcServer.start();
+
     fwThread.join();
   }
 }

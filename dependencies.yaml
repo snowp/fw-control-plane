@@ -31,5 +31,9 @@ dependencies:
     junit:
       lang: java
       version: "4.12"
+  io.grpc:
+    grpc-netty:
+      lang: java
+      version: "1.10.0"
 
 

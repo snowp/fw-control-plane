@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class ResourceFileReader {
@@ -39,8 +40,7 @@ public class ResourceFileReader {
           .ignoringUnknownFields()
           .merge(new InputStreamReader(fileInputStream), resourceBuilder);
     } catch (IOException e) {
-      logger.warning("failed to parse json at path=" + path.toString());
-      e.printStackTrace();
+      logger.log(Level.WARNING, "failed to parse json at path=" + path.toString(), e);
 
       return Optional.empty();
     }
