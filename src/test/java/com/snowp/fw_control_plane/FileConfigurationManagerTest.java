@@ -5,7 +5,7 @@ import com.google.protobuf.Duration;
 import com.google.protobuf.Message;
 import com.google.protobuf.util.JsonFormat;
 import envoy.api.v2.Cds;
-import io.envoyproxy.controlplane.cache.ResourceType;
+import io.envoyproxy.controlplane.cache.Resources;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
@@ -23,6 +23,7 @@ import org.junit.rules.TemporaryFolder;
 import source.com.snowp.fw_control_plane.FileConfigurationManager;
 import source.com.snowp.fw_control_plane.ResourceFileReader;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -30,7 +31,7 @@ public class FileConfigurationManagerTest {
 
   @Rule public TemporaryFolder temporaryFolder = new TemporaryFolder();
   private Path root;
-  private AtomicReference<Multimap<ResourceType, Message>> latestResources =
+  private AtomicReference<Multimap<String, Message>> latestResources =
       new AtomicReference<>();
   private ExecutorService executor;
   private FileConfigurationManager fileConfigurationManager;
@@ -60,13 +61,14 @@ public class FileConfigurationManagerTest {
       fileConfigurationManager.processFileEvents();
     }
 
-    assertTrue(latestResources.get().get(ResourceType.CLUSTER).iterator().next().equals(CLUSTER_A));
+    assertEquals(latestResources.get().get(Resources.CLUSTER_TYPE_URL).iterator().next(),
+        CLUSTER_A);
   }
 
   @Test
   public void testInitialState() throws IOException, InterruptedException {
 
-    ConcurrentHashMap<String, Multimap<ResourceType, Message>> seenConfigurations =
+    ConcurrentHashMap<String, Multimap<String, Message>> seenConfigurations =
         new ConcurrentHashMap<>();
 
     AtomicBoolean duplicates = new AtomicBoolean();
@@ -91,8 +93,8 @@ public class FileConfigurationManagerTest {
     } while (seenConfigurations.size() != 2);
 
     assertFalse(duplicates.get());
-    assertTrue(seenConfigurations.get("foo").get(ResourceType.CLUSTER).contains(CLUSTER_A));
-    assertTrue(seenConfigurations.get("bar").get(ResourceType.CLUSTER).contains(CLUSTER_B));
+    assertTrue(seenConfigurations.get("foo").get(Resources.CLUSTER_TYPE_URL).contains(CLUSTER_A));
+    assertTrue(seenConfigurations.get("bar").get(Resources.CLUSTER_TYPE_URL).contains(CLUSTER_B));
   }
 
   private void newFile(Message message, String filename, String... path) throws IOException {

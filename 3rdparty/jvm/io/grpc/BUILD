@@ -19,7 +19,6 @@ java_library(
         "//3rdparty/jvm/com/google/code/findbugs:jsr305",
         "//3rdparty/jvm/com/google/code/gson:gson",
         "//3rdparty/jvm/com/google/errorprone:error_prone_annotations",
-        "//3rdparty/jvm/com/google/guava:guava",
         "//3rdparty/jvm/io/opencensus:opencensus_api",
         "//3rdparty/jvm/io/opencensus:opencensus_contrib_grpc_metrics",
         ":grpc_context"

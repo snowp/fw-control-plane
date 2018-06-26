@@ -20,6 +20,8 @@ java_library(
         "//external:jar/io/envoyproxy/controlplane/cache"
     ],
     runtime_deps = [
+        "//3rdparty/jvm/com/google/auto/value:auto_value_annotations",
+        "//3rdparty/jvm/com/google/guava:guava",
         "//3rdparty/jvm/io/projectreactor:reactor_core",
         "//3rdparty/jvm/org/slf4j:slf4j_api",
         ":api"

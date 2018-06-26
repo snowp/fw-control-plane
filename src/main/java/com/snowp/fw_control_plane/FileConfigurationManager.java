@@ -5,7 +5,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
 import com.google.protobuf.Message;
-import io.envoyproxy.controlplane.cache.ResourceType;
+import envoy.api.v2.Cds;
+import envoy.api.v2.Eds;
+import envoy.api.v2.Lds;
+import envoy.api.v2.Rds;
+import io.envoyproxy.controlplane.cache.Resources;
 import io.envoyproxy.controlplane.cache.Snapshot;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -15,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -39,15 +44,23 @@ public class FileConfigurationManager {
   private final Map<String, WatchKey> watches = new HashMap<>();
   private final Map<String, Snapshot> groupSnapshots = new HashMap<>();
 
-  private static final Map<String, ResourceType> resourceNames = ImmutableMap.of(
-      "clusters", ResourceType.CLUSTER,
-      "routes", ResourceType.ROUTE,
-      "listeners", ResourceType.LISTENER,
-      "endpoints", ResourceType.ENDPOINT
+  // Mapping from the short form of a resource name to the full type url
+  private static final Map<String, String> shortFormToTypeUrl = ImmutableMap.of(
+      "clusters", Resources.CLUSTER_TYPE_URL,
+      "routes", Resources.ROUTE_TYPE_URL,
+      "listeners", Resources.LISTENER_TYPE_URL,
+      "endpoints", Resources.ENDPOINT_TYPE_URL
+  );
+
+  private static final Map<String, Message> defaultMessages = ImmutableMap.of(
+      "clusters", Cds.Cluster.getDefaultInstance(),
+      "routes", Rds.RouteConfiguration.getDefaultInstance(),
+      "listeners", Lds.Listener.getDefaultInstance(),
+      "endpoints", Eds.ClusterLoadAssignment.getDefaultInstance()
   );
 
   @FunctionalInterface public interface ResourceUpdateCallback {
-    void onResourceUpdate(String group, Multimap<ResourceType, Message> resources);
+    void onResourceUpdate(String group, Multimap<String, Message> resources);
   }
 
   public FileConfigurationManager(Path configDirectory,
@@ -74,25 +87,41 @@ public class FileConfigurationManager {
         String groupName = group.getFileName().toString();
         watches.put(groupName, group.register(watchService, ENTRY_CREATE, ENTRY_DELETE));
 
-        HashMultimap<ResourceType, Message> resourcesMap = HashMultimap.create();
+        HashMultimap<String, Message> resourcesMap = HashMultimap.create();
 
         try (DirectoryStream<Path> groupDirectoryStream = Files.newDirectoryStream(group)) {
           for (Path resource : groupDirectoryStream) {
             String resourceName = resource.getFileName().toString();
 
+            switch (resourceName) {
+              case "clusters":
+                resourcesMap.putAll(shortFormToTypeUrl.get(resourceName), currentResources(resource,
+                    Cds.Cluster.getDefaultInstance()));
+                break;
+              case "endpoints":
+                resourcesMap.putAll(
+                    shortFormToTypeUrl.get(resourceName),
+                    currentResources(resource, Eds.ClusterLoadAssignment.getDefaultInstance()));
+                break;
+              case "listeners":
+                resourcesMap.putAll(shortFormToTypeUrl.get(resourceName),
+                    currentResources(resource, Lds.Listener.getDefaultInstance()));
+                break;
+              case "routes":
+                resourcesMap.putAll(shortFormToTypeUrl.get(resourceName),
+                    currentResources(resource, Rds.RouteConfiguration.getDefaultInstance()));
+              default:
+                System.out.println("invalid type url " + resourceName);
+            }
+
             watches.put(groupName + "/" + resourceName,
                 resource.register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY));
-
-            ResourceType resourceType = resourceNames.get(resourceName);
-            Iterable<Message> currentResources = currentResources(resource, resourceType);
-
-            resourcesMap.putAll(resourceType, currentResources);
           }
 
           // todo: deterministly generate version from resources
-          groupSnapshots.put(groupName, Snapshot.create(resourcesMap, "version"));
+          groupSnapshots.put(groupName, Snapshots.fromResourceMap(resourcesMap, "version"));
 
-          ImmutableMultimap<ResourceType, Message> resourcesCopy =
+          ImmutableMultimap<String, Message> resourcesCopy =
               ImmutableMultimap.copyOf(resourcesMap);
 
           callbackExecutor.submit(
@@ -175,44 +204,46 @@ public class FileConfigurationManager {
   private void clearResource(String group, String resourceType) {
     synchronized (monitor) {
       Snapshot snapshot = groupSnapshots.get(group);
-      Multimap<ResourceType, Message> resources = ImmutableMultimap.copyOf(snapshot.resources());
-      resources.removeAll(resourceNames.get(resourceType));
+      Multimap<String, Message> resources = ImmutableMultimap.copyOf(Snapshots.toMultiMap(snapshot));
+      resources.removeAll(shortFormToTypeUrl.get(resourceType));
 
-      groupSnapshots.put(group, Snapshot.create(resources, snapshot.version()));
+      groupSnapshots.put(group, Snapshots.fromResourceMap(resources, snapshot.version(Resources.CLUSTER_TYPE_URL)));
     }
   }
 
   private void updateResource(String group, String resourceType) throws IOException {
-    Iterable<Message> resources =
+    Iterable<? extends Message> resources =
         currentResources(configDirectory.resolve(group).resolve(resourceType),
-            resourceNames.get(resourceType));
+            defaultMessages.get(resourceType));
 
     synchronized (monitor) {
       Snapshot oldSnapshot = groupSnapshots.remove(group);
       if (oldSnapshot == null) {
         // needs to be mutable becase we try to clean it out on the next few lines
-        oldSnapshot = Snapshot.create(HashMultimap.create(), "first!");
+        oldSnapshot = Snapshot.create(Collections.emptyList(), Collections.emptyList(),
+            Collections.emptyList(), Collections.emptyList(), "first!");
       }
-      Multimap<ResourceType, Message> oldResourcesMap = oldSnapshot.resources();
-      oldResourcesMap.removeAll(resourceNames.get(resourceType));
-      oldResourcesMap.putAll(resourceNames.get(resourceType), resources);
-      groupSnapshots.put(group, Snapshot.create(oldResourcesMap, oldSnapshot.version()));
+      Multimap<String, Message> oldResourcesMap = Snapshots.toMultiMap(oldSnapshot);
+      oldResourcesMap.removeAll(shortFormToTypeUrl.get(resourceType));
+      oldResourcesMap.putAll(shortFormToTypeUrl.get(resourceType), resources);
+      groupSnapshots.put(group, Snapshots.fromResourceMap(oldResourcesMap,
+          oldSnapshot.version(Resources.CLUSTER_TYPE_URL)));
 
-      ImmutableMultimap<ResourceType, Message> resourcesCopy =
+      ImmutableMultimap<String, Message> resourcesCopy =
           ImmutableMultimap.copyOf(oldResourcesMap);
 
       callbackExecutor.submit(() -> resourceUpdateCallback.onResourceUpdate(group, resourcesCopy));
     }
   }
 
-  private Iterable<Message> currentResources(Path resourcePath, ResourceType resourceType)
+  private <T extends Message> Iterable<T> currentResources(Path resourcePath, T defaultInstance)
       throws IOException {
-    Set<Message> resources = new HashSet<>();
+    Set<T> resources = new HashSet<>();
 
     try (DirectoryStream<Path> pathDirectoryStream = Files.newDirectoryStream(resourcePath,
         "*.json")) {
       for (Path path : pathDirectoryStream) {
-        resourceFileReader.readResource(path, resourceType).ifPresent(resources::add);
+        resourceFileReader.readResource(path, defaultInstance).ifPresent(resources::add);
       }
     }
 

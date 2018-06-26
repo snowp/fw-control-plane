@@ -3,7 +3,8 @@ java_library(
     srcs = [
         "com/snowp/fw_control_plane/Main.java",
         "com/snowp/fw_control_plane/FileConfigurationManager.java",
-        "com/snowp/fw_control_plane/ResourceFileReader.java"
+        "com/snowp/fw_control_plane/ResourceFileReader.java",
+        "com/snowp/fw_control_plane/Snapshots.java"
     ],
     deps = [
         "//3rdparty/jvm/io/envoyproxy/controlplane:api",

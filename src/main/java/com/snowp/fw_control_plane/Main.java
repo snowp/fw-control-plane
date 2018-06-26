@@ -13,7 +13,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class Main {
   public static void main(String[] args) throws Exception {
-    SimpleCache cache = new SimpleCache(null, g -> "foo");
+    SimpleCache<String> cache = new SimpleCache<>(g -> "foo");
 
     Path configDirectory = Paths.get(System.getProperty("user.dir"), args[0].split("/"));
 
@@ -23,7 +23,7 @@ public class Main {
     FileConfigurationManager fileConfigurationManager =
         new FileConfigurationManager(configDirectory,
             ((group, resources) -> cache.setSnapshot(group,
-                Snapshot.create(resources, ((Long) counter.incrementAndGet()).toString()))),
+                Snapshots.fromResourceMap(resources, ((Long) counter.incrementAndGet()).toString()))),
             new ResourceFileReader(),
             Executors.newSingleThreadExecutor());
 

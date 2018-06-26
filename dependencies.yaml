@@ -12,13 +12,13 @@ dependencies:
   io.envoyproxy.controlplane:
     cache:
       lang: java
-      version: "0.0.7"
+      version: "0.1.6"
     api:
       lang: java
-      version: "0.0.7"
+      version: "0.1.6"
     server: 
       lang: java
-      version: "0.0.7"
+      version: "0.1.6"
   com.google.protobuf:
     protobuf-java-util:
       lang: java
