@@ -13,6 +13,7 @@ def declare_maven(hash):
     )
 
 def maven_dependencies(callback = declare_maven):
+    callback({"artifact": "com.beust:jcommander:1.72", "lang": "java", "sha1": "6375e521c1e11d6563d4f25a07ce124ccf8cd171", "repository": "https://repo.maven.apache.org/maven2/", "name": "com_beust_jcommander", "actual": "@com_beust_jcommander//jar", "bind": "jar/com/beust/jcommander"})
     callback({"artifact": "com.google.api.grpc:proto-google-common-protos:1.0.0", "lang": "java", "sha1": "86f070507e28b930e50d218ee5b6788ef0dd05e6", "repository": "https://repo.maven.apache.org/maven2/", "name": "com_google_api_grpc_proto_google_common_protos", "actual": "@com_google_api_grpc_proto_google_common_protos//jar", "bind": "jar/com/google/api/grpc/proto_google_common_protos"})
     callback({"artifact": "com.google.auto.value:auto-value-annotations:1.6", "lang": "java", "sha1": "da725083ee79fdcd86d9f3d8a76e38174a01892a", "repository": "https://repo.maven.apache.org/maven2/", "name": "com_google_auto_value_auto_value_annotations", "actual": "@com_google_auto_value_auto_value_annotations//jar", "bind": "jar/com/google/auto/value/auto_value_annotations"})
 # duplicates in com.google.code.findbugs:jsr305 promoted to 3.0.0

@@ -1,7 +1,7 @@
 package source.com.snowp.fw_control_plane;
 
+import com.beust.jcommander.JCommander;
 import io.envoyproxy.controlplane.cache.SimpleCache;
-import io.envoyproxy.controlplane.cache.Snapshot;
 import io.envoyproxy.controlplane.server.DiscoveryServer;
 import io.grpc.Server;
 import io.grpc.netty.NettyServerBuilder;
@@ -10,12 +10,20 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
+import source.com.snowp.fw_control_plane.cli.Args;
 
 public class Main {
-  public static void main(String[] args) throws Exception {
+  public static void main(String[] argv) throws Exception {
+
+    Args args = new Args();
+    JCommander.newBuilder()
+        .args(argv)
+        .addObject(args)
+        .build();
+
     SimpleCache<String> cache = new SimpleCache<>(g -> "foo");
 
-    Path configDirectory = Paths.get(System.getProperty("user.dir"), args[0].split("/"));
+    Path configDirectory = Paths.get(args.configDir);
 
     // cheap and dirty way of ensuring we bump the version
     AtomicLong counter = new AtomicLong();
@@ -43,7 +51,7 @@ public class Main {
 
     DiscoveryServer discoveryServer = new DiscoveryServer(cache);
 
-    Server grpcServer = NettyServerBuilder.forPort(5555)
+    Server grpcServer = NettyServerBuilder.forPort(args.port)
         .addService(discoveryServer.getEndpointDiscoveryServiceImpl())
         .addService(discoveryServer.getRouteDiscoveryServiceImpl())
         .addService(discoveryServer.getListenerDiscoveryServiceImpl())

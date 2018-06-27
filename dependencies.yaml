@@ -9,6 +9,10 @@ options:
   versionConflictPolicy: highest
 
 dependencies:
+  com.beust:
+    jcommander:
+      lang: java
+      version: "1.72"
   io.envoyproxy.controlplane:
     cache:
       lang: java
