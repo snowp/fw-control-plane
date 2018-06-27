@@ -1,6 +1,8 @@
 package source.com.snowp.fw_control_plane;
 
+import com.google.common.collect.BiMap;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
@@ -33,11 +35,12 @@ import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
 import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
 
 public class FileConfigurationManager {
+
   private final WatchService watchService = FileSystems.getDefault().newWatchService();
   private final Path configDirectory;
   private final ResourceUpdateCallback resourceUpdateCallback;
   private final ResourceFileReader resourceFileReader;
-  private ExecutorService callbackExecutor;
+  private final ExecutorService callbackExecutor;
 
   private final Object monitor = new Object();
 
@@ -45,7 +48,7 @@ public class FileConfigurationManager {
   private final Map<String, Snapshot> groupSnapshots = new HashMap<>();
 
   // Mapping from the short form of a resource name to the full type url
-  private static final Map<String, String> shortFormToTypeUrl = ImmutableMap.of(
+  private static final BiMap<String, String> shortFormToTypeUrl = ImmutableBiMap.of(
       "clusters", Resources.CLUSTER_TYPE_URL,
       "routes", Resources.ROUTE_TYPE_URL,
       "listeners", Resources.LISTENER_TYPE_URL,
@@ -53,10 +56,10 @@ public class FileConfigurationManager {
   );
 
   private static final Map<String, Message> defaultMessages = ImmutableMap.of(
-      "clusters", Cds.Cluster.getDefaultInstance(),
-      "routes", Rds.RouteConfiguration.getDefaultInstance(),
-      "listeners", Lds.Listener.getDefaultInstance(),
-      "endpoints", Eds.ClusterLoadAssignment.getDefaultInstance()
+      Resources.CLUSTER_TYPE_URL, Cds.Cluster.getDefaultInstance(),
+      Resources.ROUTE_TYPE_URL, Rds.RouteConfiguration.getDefaultInstance(),
+      Resources.LISTENER_TYPE_URL, Lds.Listener.getDefaultInstance(),
+      Resources.ENDPOINT_TYPE_URL, Eds.ClusterLoadAssignment.getDefaultInstance()
   );
 
   @FunctionalInterface public interface ResourceUpdateCallback {
@@ -93,26 +96,9 @@ public class FileConfigurationManager {
           for (Path resource : groupDirectoryStream) {
             String resourceName = resource.getFileName().toString();
 
-            switch (resourceName) {
-              case "clusters":
-                resourcesMap.putAll(shortFormToTypeUrl.get(resourceName), currentResources(resource,
-                    Cds.Cluster.getDefaultInstance()));
-                break;
-              case "endpoints":
-                resourcesMap.putAll(
-                    shortFormToTypeUrl.get(resourceName),
-                    currentResources(resource, Eds.ClusterLoadAssignment.getDefaultInstance()));
-                break;
-              case "listeners":
-                resourcesMap.putAll(shortFormToTypeUrl.get(resourceName),
-                    currentResources(resource, Lds.Listener.getDefaultInstance()));
-                break;
-              case "routes":
-                resourcesMap.putAll(shortFormToTypeUrl.get(resourceName),
-                    currentResources(resource, Rds.RouteConfiguration.getDefaultInstance()));
-              default:
-                System.out.println("invalid type url " + resourceName);
-            }
+            String typeUrl = shortFormToTypeUrl.get(resourceName);
+
+            resourcesMap.putAll(typeUrl, currentResources(resource, defaultMessages.get(typeUrl)));
 
             watches.put(groupName + "/" + resourceName,
                 resource.register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY));
@@ -161,7 +147,7 @@ public class FileConfigurationManager {
 
           try (DirectoryStream<Path> resources = Files.newDirectoryStream(absolutePath)) {
             for (Path resource : resources) {
-              updateResource(groupName, resource.getFileName().toString());
+              updateResource(groupName, shortFormToTypeUrl.get(resource.getFileName().toString()));
             }
           }
 
@@ -186,35 +172,35 @@ public class FileConfigurationManager {
         }
       } else {
         // this means a resource file was modified, so let's read the entire resource directory
-        String resourceType = relativePath.getName(1).toString();
+        String typeUrl = shortFormToTypeUrl.get(relativePath.getName(1).toString());
 
         // this has to be at the group level
         String group = relativePath.getName(0).toString();
 
         if (event.kind().equals(ENTRY_DELETE)) {
-          clearResource(group, resourceType);
+          clearResource(group, typeUrl);
         } else {
-          updateResource(group, resourceType);
+          updateResource(group, typeUrl);
         }
       }
     }
     key.reset();
   }
 
-  private void clearResource(String group, String resourceType) {
+  private void clearResource(String group, String typeUrl) {
     synchronized (monitor) {
       Snapshot snapshot = groupSnapshots.get(group);
       Multimap<String, Message> resources = ImmutableMultimap.copyOf(Snapshots.toMultiMap(snapshot));
-      resources.removeAll(shortFormToTypeUrl.get(resourceType));
+      resources.removeAll(typeUrl);
 
       groupSnapshots.put(group, Snapshots.fromResourceMap(resources, snapshot.version(Resources.CLUSTER_TYPE_URL)));
     }
   }
 
-  private void updateResource(String group, String resourceType) throws IOException {
+  private void updateResource(String group, String typeUrl) throws IOException {
     Iterable<? extends Message> resources =
-        currentResources(configDirectory.resolve(group).resolve(resourceType),
-            defaultMessages.get(resourceType));
+        currentResources(configDirectory.resolve(group).resolve(shortFormToTypeUrl.inverse().get(typeUrl)),
+            defaultMessages.get(typeUrl));
 
     synchronized (monitor) {
       Snapshot oldSnapshot = groupSnapshots.remove(group);
@@ -224,8 +210,8 @@ public class FileConfigurationManager {
             Collections.emptyList(), Collections.emptyList(), "first!");
       }
       Multimap<String, Message> oldResourcesMap = Snapshots.toMultiMap(oldSnapshot);
-      oldResourcesMap.removeAll(shortFormToTypeUrl.get(resourceType));
-      oldResourcesMap.putAll(shortFormToTypeUrl.get(resourceType), resources);
+      oldResourcesMap.removeAll(typeUrl);
+      oldResourcesMap.putAll(typeUrl, resources);
       groupSnapshots.put(group, Snapshots.fromResourceMap(oldResourcesMap,
           oldSnapshot.version(Resources.CLUSTER_TYPE_URL)));
 
