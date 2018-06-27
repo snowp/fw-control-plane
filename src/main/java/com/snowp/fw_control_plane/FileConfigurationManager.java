@@ -39,7 +39,7 @@ public class FileConfigurationManager {
   private final WatchService watchService = FileSystems.getDefault().newWatchService();
   private final Path configDirectory;
   private final ResourceUpdateCallback resourceUpdateCallback;
-  private final ResourceFileReader resourceFileReader;
+  private final ResourceFileLoader resourceFileLoader;
   private final ExecutorService callbackExecutor;
 
   private final Object monitor = new Object();
@@ -67,12 +67,12 @@ public class FileConfigurationManager {
   }
 
   public FileConfigurationManager(Path configDirectory,
-      ResourceUpdateCallback resourceUpdateCallback, ResourceFileReader resourceFileReader,
+      ResourceUpdateCallback resourceUpdateCallback, ResourceFileLoader resourceFileLoader,
       ExecutorService callbackExecutor)
       throws IOException {
     this.configDirectory = configDirectory;
     this.resourceUpdateCallback = resourceUpdateCallback;
-    this.resourceFileReader = resourceFileReader;
+    this.resourceFileLoader = resourceFileLoader;
     this.callbackExecutor = callbackExecutor;
 
     initializeSnapshot();
@@ -229,7 +229,7 @@ public class FileConfigurationManager {
     try (DirectoryStream<Path> pathDirectoryStream = Files.newDirectoryStream(resourcePath,
         "*.json")) {
       for (Path path : pathDirectoryStream) {
-        resourceFileReader.readResource(path, defaultInstance).ifPresent(resources::add);
+        resourceFileLoader.loadResource(path, defaultInstance).ifPresent(resources::add);
       }
     }
 

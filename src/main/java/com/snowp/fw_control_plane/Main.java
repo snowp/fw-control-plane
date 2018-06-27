@@ -32,7 +32,7 @@ public class Main {
         new FileConfigurationManager(configDirectory,
             ((group, resources) -> cache.setSnapshot(group,
                 Snapshots.fromResourceMap(resources, ((Long) counter.incrementAndGet()).toString()))),
-            new ResourceFileReader(),
+            new ResourceFileLoader(),
             Executors.newSingleThreadExecutor());
 
     Thread fwThread = new Thread(() -> {

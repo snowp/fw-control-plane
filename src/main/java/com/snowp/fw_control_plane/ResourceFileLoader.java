@@ -10,11 +10,22 @@ import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class ResourceFileReader {
+/**
+ * Loads a resource file containing a json serialized proto message.
+ */
+public class ResourceFileLoader {
 
-  private static final Logger logger = Logger.getLogger(ResourceFileReader.class.getName());
+  private static final Logger logger = Logger.getLogger(ResourceFileLoader.class.getName());
 
-  <T extends Message> Optional<T> readResource(Path path, T defaultInstance) {
+  /**
+   * Loads a proto message from a file.
+   *
+   * @param path path to file
+   * @param defaultInstance instance of desired proto type
+   * @param <T> message type
+   * @return deserialized message if successful
+   */
+  <T extends Message> Optional<T> loadResource(Path path, T defaultInstance) {
     FileInputStream fileInputStream;
     Message.Builder resourceBuilder = defaultInstance.toBuilder();
 

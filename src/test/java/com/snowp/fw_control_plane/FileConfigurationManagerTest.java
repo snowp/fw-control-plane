@@ -21,7 +21,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import source.com.snowp.fw_control_plane.FileConfigurationManager;
-import source.com.snowp.fw_control_plane.ResourceFileReader;
+import source.com.snowp.fw_control_plane.ResourceFileLoader;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -49,7 +49,7 @@ public class FileConfigurationManagerTest {
     executor = Executors.newSingleThreadExecutor();
     fileConfigurationManager =
         new FileConfigurationManager(root, (a, b) -> latestResources.set(b),
-            new ResourceFileReader(), executor);
+            new ResourceFileLoader(), executor);
   }
 
   @Test
@@ -85,7 +85,7 @@ public class FileConfigurationManagerTest {
     newFile(CLUSTER_A, "cluster_1.json", "foo", "clusters");
     newFile(CLUSTER_B, "cluster_2.json", "bar", "clusters");
     fileConfigurationManager =
-        new FileConfigurationManager(root, resourceUpdateCallback, new ResourceFileReader(),
+        new FileConfigurationManager(root, resourceUpdateCallback, new ResourceFileLoader(),
             executor);
 
     do {

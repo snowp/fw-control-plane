@@ -3,7 +3,7 @@ java_library(
     srcs = [
         "com/snowp/fw_control_plane/Main.java",
         "com/snowp/fw_control_plane/FileConfigurationManager.java",
-        "com/snowp/fw_control_plane/ResourceFileReader.java",
+        "com/snowp/fw_control_plane/ResourceFileLoader.java",
         "com/snowp/fw_control_plane/Snapshots.java",
         "com/snowp/fw_control_plane/cli/Args.java"
     ],
